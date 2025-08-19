@@ -1,0 +1,85 @@
+services:
+  http:
+    image: nginx
+    container_name: http
+    depends_on:
+      - reload
+      - server
+    ports:
+      - 8080:8080
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./dist:/usr/share/nginx/html
+
+  reload:
+    image: bzweb
+    container_name: reload
+    volumes:
+      - ./:/app
+
+  server:
+    image: bzbot
+    container_name: server
+    depends_on:
+      - async1
+      - async2
+      - postgres
+      - minio
+      - redis
+    env_file: .env
+    ports:
+      - 8081:8081
+    volumes:
+      - ./server/assets:/app/assets
+
+  async1:
+    image: bzbot-async1
+    container_name: async1
+    depends_on:
+      - postgres
+    env_file: .env
+    volumes:
+      - ./server/assets:/app/assets
+
+  async2:
+    image: bzbot-async2
+    container_name: async2
+    depends_on:
+      - postgres
+      - minio
+    env_file: .env
+    volumes:
+      - ./server/assets:/app/assets
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    ports:
+      - 5432:5432
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+
+  minio:
+    image: quay.io/minio/minio:latest
+    container_name: minio
+    ports:
+      - 9000:9000
+    volumes:
+      - minio:/data
+    environment:
+      MINIO_ROOT_USER: minio123
+      MINIO_ROOT_PASSWORD: minio123
+    command: server /data
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - 6379:6379
+
+volumes:
+  postgres:
+  minio:

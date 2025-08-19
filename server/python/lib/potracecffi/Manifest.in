@@ -1,0 +1,7 @@
+# Include the license and readme file
+include LICENSE
+include README
+
+# Include build files
+recursive-include potracecffi *.h
+recursive-include potracecffi *.c

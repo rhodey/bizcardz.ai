@@ -1,0 +1,36 @@
+const choo = require('choo')
+const devtools = require('choo-devtools')
+const debounce = require('debounce')
+const fetchh = require('./fetch.js')
+
+function store(state, emitter) {
+  emitter.on('DOMContentLoaded', () => {
+    const onChange = () => emitter.emit('render')
+    window.addEventListener('resize', debounce(onChange, 500))
+    const auth = () => fetchh('/api/auth').catch(console.error)
+    setInterval(auth, 60 * 1000)
+    auth()
+  })
+}
+
+const app = choo()
+app.use(devtools())
+app.use(require('./stores/home.js'))
+app.use(require('./stores/one.js'))
+app.use(require('./stores/two.js'))
+app.use(require('./stores/three.js'))
+app.use(require('./stores/four.js'))
+app.use(require('./stores/cart.js'))
+app.use(require('./stores/favs.js'))
+app.use(store)
+
+app.route('/*', require('./views/404.js'))
+app.route('/', require('./views/home.js'))
+app.route('/faq', require('./views/faq.js'))
+app.route('/one', require('./views/one.js'))
+app.route('/two', require('./views/two.js'))
+app.route('/three', require('./views/three.js'))
+app.route('/four', require('./views/four.js'))
+app.route('/cart', require('./views/cart.js'))
+app.route('/favs', require('./views/favs.js'))
+app.mount('.app')
