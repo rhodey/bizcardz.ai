@@ -1,4 +1,5 @@
 const fs = require('fs')
+const fsp = require('fs').promises
 const minimist = require('minimist')
 const { mkdirp } = require('mkdirp')
 const { v7: uuidv7 } = require('uuid')
@@ -465,18 +466,25 @@ async function initFont(name, key) {
 }
 
 async function main(texts, steps, fonts) {
-  await mkdirp(`/tmp/${thread}`)
-  await mkdirp(`assets/genai`)
-  await initFont(fonts[0].name, fonts[0].key)
-  await initFont(fonts[1].name, fonts[1].key)
-  font1 = fonts[0].name
-  font2 = fonts[1].name
-  scaleFonts()
-  // tall && back = wide
-  const compat = !front && tall
-  compat && (wide = true)
-  compat && (tall = false)
-  await generate(texts, steps)
+  const dir = `/tmp/${thread}`
+  try {
+
+    await mkdirp(dir)
+    await mkdirp(`assets/genai`)
+    await initFont(fonts[0].name, fonts[0].key)
+    await initFont(fonts[1].name, fonts[1].key)
+    font1 = fonts[0].name
+    font2 = fonts[1].name
+    scaleFonts()
+    // tall && back = wide
+    const compat = !front && tall
+    compat && (wide = true)
+    compat && (tall = false)
+    await generate(texts, steps)
+
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true })
+  }
 }
 
 const argv = minimist(process.argv.slice(2))

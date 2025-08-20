@@ -16,12 +16,12 @@ const silver = [188, 198, 204]
 
 const srcEmpty = {
   wide: {
-    b: '/assets/img/empty-wide-b.png',
-    w: '/assets/img/empty-wide-w.png',
+    b: '/assets/img/loading-wide-b.png',
+    w: '/assets/img/loading-wide-w.png',
   },
   tall: {
-    b: '/assets/img/empty-tall-b.png',
-    w: '/assets/img/empty-tall-w.png',
+    b: '/assets/img/loading-tall-b.png',
+    w: '/assets/img/loading-tall-w.png',
   },
 }
 
