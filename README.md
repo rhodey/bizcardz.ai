@@ -3,6 +3,8 @@
 
 ![readme.gif](assets/readme.gif)
 
+[more](assets/img/faq-all.jpg) [pics](assets/img/faq-black-silver.jpg) [are](assets/img/faq-black-gold.jpg) [he](assets/img/faq-white-silver.jpg) [re](assets/img/faq-white-gold.jpg)
+
 ## Config
 In prod [Groq](https://console.groq.com/docs/models) (not Grok) is used because they are about 40% faster than openai & gemini
 
