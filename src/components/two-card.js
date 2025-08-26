@@ -18,6 +18,17 @@ const silver = [188, 198, 204]
 
 const srcEmpty = {
   wide: {
+    b: '/assets/img/empty-wide-b.png',
+    w: '/assets/img/empty-wide-w.png',
+  },
+  tall: {
+    b: '/assets/img/empty-tall-b.png',
+    w: '/assets/img/empty-tall-w.png',
+  },
+}
+
+const srcLoading = {
+  wide: {
     b: '/assets/img/loading-wide-b.png',
     w: '/assets/img/loading-wide-w.png',
   },
@@ -37,6 +48,7 @@ module.exports = class TwoCard extends Component {
     state.cards = state.cards ?? { cache: {} }
     this.cache = state.cards.cache
     this.compatt = null
+    this.empty = id.includes('card24') ? srcEmpty : srcLoading
   }
 
   compat(id) {
@@ -184,7 +196,7 @@ module.exports = class TwoCard extends Component {
 
   loadSVG(empty) {
     if (empty) {
-      empty = srcEmpty[this.dimens][this.colors[0]]
+      empty = this.empty[this.dimens][this.colors[0]]
       const ok = document.getElementById(this.id)
       ok && (ok.src = empty)
     }
@@ -294,7 +306,7 @@ module.exports = class TwoCard extends Component {
     this.colors = colors
     this.fonts = [font1, font2]
     this.scale = scale
-    const empty = srcEmpty[this.dimens][this.colors[0]]
+    const empty = this.empty[this.dimens][this.colors[0]]
     return html`<img id="${this.id}" class="${clazz}" scr="${empty}">`
   }
 }

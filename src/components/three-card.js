@@ -16,6 +16,17 @@ const silver = [188, 198, 204]
 
 const srcEmpty = {
   wide: {
+    b: '/assets/img/empty-wide-b.png',
+    w: '/assets/img/empty-wide-w.png',
+  },
+  tall: {
+    b: '/assets/img/empty-tall-b.png',
+    w: '/assets/img/empty-tall-w.png',
+  },
+}
+
+const srcLoading = {
+  wide: {
     b: '/assets/img/loading-wide-b.png',
     w: '/assets/img/loading-wide-w.png',
   },
@@ -33,6 +44,7 @@ module.exports = class ThreeCard extends Component {
     this.og = true
     this.canvas = document.createElement('canvas')
     this.ctrll = false
+    this.empty = id.includes('card34') ? srcEmpty : srcLoading
   }
 
   ctrl() {
@@ -236,7 +248,7 @@ module.exports = class ThreeCard extends Component {
 
   draw() {
     this.og = !this.og
-    if (!this.bgkey) { return document.getElementById(this.id).src = this.empty }
+    if (!this.bgkey) { return document.getElementById(this.id).src = this.emptyy }
     const og = (arr) => {
       const [img1, img2, img3] = arr
       const { canvas, ctx } = this
@@ -303,7 +315,7 @@ module.exports = class ThreeCard extends Component {
   update(clazz, dimens, colors, fid, bgkey, levels=[]) {
     if (clazz !== this.clazz) { return true }
     if (dimens !== this.dimens) { return true }
-    this.empty = srcEmpty[dimens][colors[0]]
+    this.emptyy = this.empty[dimens][colors[0]]
     let diff = colors !== this.colors
     diff = diff || (fid.toString() !== this.fid.toString())
     diff = diff || (bgkey !== this.bgkey)
@@ -336,7 +348,7 @@ module.exports = class ThreeCard extends Component {
     this.fid = fid
     this.bgkey = bgkey
     this.levels = levels
-    this.empty = srcEmpty[this.dimens][this.colors[0]]
-    return html`<img id="${this.id}" class="${clazz}" scr="${this.empty}">`
+    this.emptyy = this.empty[this.dimens][this.colors[0]]
+    return html`<img id="${this.id}" class="${clazz}" scr="${this.emptyy}">`
   }
 }
