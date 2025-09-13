@@ -19,7 +19,7 @@ module.exports = function faqView(state, emit) {
         <tr><p>This site is free. Elecrow charges about $1 per pcb in quantities of 50 and $0.80 in quantities of 100.</p></tr>
         <br/>
 
-        <tr><h2><i>Show me the end result</i></h2></tr>
+        <tr><h2><i>Show me pictures</i></h2></tr>
         <tr><p>
           <a target="_blank" rel="noopener noreferrer" href="/assets/img/faq-all.jpg">here</a>
           <a target="_blank" rel="noopener noreferrer" href="/assets/img/faq-black-silver.jpg">are</a>
