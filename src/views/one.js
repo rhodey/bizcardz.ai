@@ -74,11 +74,6 @@ module.exports = function oneView(state, emit) {
     return en ? enabled(name) : disabled(name)
   })
 
-  let selection = ''
-  if (state.selection) {
-    selection = edit(state.selection)
-  }
-
   return html`
     <div class="app container one">
       ${header}
