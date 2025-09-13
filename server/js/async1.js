@@ -7,10 +7,15 @@ const metrics = require('./metrics.js')
 
 // manages how to run genai.js and how many to run
 
-const concurrency = 12
-// based on groq RPM = 1k
-// and batch = 4 * 5 = 20 groq requests
-// and batch completes in approx 20 seconds
+const concurrency = 26
+/*
+  based on gemini RPM = 8k
+  and batch = 4 * 4 = 16 svg gen
+            + 4 * 3 = 12 svg guide
+            + 4 * 6 = 24 svg rank
+  = 52
+  and batch completes in approx 12 seconds
+*/
 
 const noop = () => {}
 const isDevEnv = () => process.env.environment !== 'prod'
@@ -55,10 +60,10 @@ function child(args, short, thread) {
   })
 }
 
-async function getTextRenders(bid, uid, dimens, front, texts, fonts, center) {
+async function getTextRenders(bid, uid, dimens, front, texts, fonts, align) {
   const short = bid.substr(30)
   const thread = crypto.randomUUID().substring(0, 6)
-  let args = JSON.stringify({ thread, dimens, front, texts, fonts, center })
+  let args = JSON.stringify({ thread, dimens, front, texts, fonts, align })
   args = Buffer.from(args).toString('base64')
   const proc = await child([args], short, thread)
   const addSvg = (id, svg) => pgPool.query(
@@ -130,8 +135,9 @@ async function doWork(work) {
   }
 
   const threads = 4
+  const align = ['left', 'left', 'center', 'center']
   const works = new Array(threads).fill(1)
-    .map((n, i) => getTextRenders(id, uid, dimens, front, texts, fonts, (++i === threads)))
+    .map((n, i) => getTextRenders(id, uid, dimens, front, texts, fonts, align[i]))
 
   Promise.allSettled(works).then((results) => {
     results.filter((res) => res.status === 'rejected')

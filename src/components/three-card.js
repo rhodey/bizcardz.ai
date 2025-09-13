@@ -25,17 +25,6 @@ const srcEmpty = {
   },
 }
 
-const srcLoading = {
-  wide: {
-    b: '/assets/img/loading-wide-b.png',
-    w: '/assets/img/loading-wide-w.png',
-  },
-  tall: {
-    b: '/assets/img/loading-tall-b.png',
-    w: '/assets/img/loading-tall-w.png',
-  },
-}
-
 module.exports = class ThreeCard extends Component {
   constructor(id, state, emit) {
     super(id)
@@ -44,7 +33,7 @@ module.exports = class ThreeCard extends Component {
     this.og = true
     this.canvas = document.createElement('canvas')
     this.ctrll = false
-    this.empty = id.includes('card34') ? srcEmpty : srcLoading
+    this.empty = srcEmpty
   }
 
   ctrl() {

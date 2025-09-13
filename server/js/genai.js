@@ -1,49 +1,49 @@
 const fs = require('fs')
 const fsp = require('fs').promises
+const util = require('util')
 const minimist = require('minimist')
 const { mkdirp } = require('mkdirp')
 const { v7: uuidv7 } = require('uuid')
 const combinations = require('combinations')
 const { createCanvas, registerFont, loadImage } = require('canvas')
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3')
-const { OpenAI } = require('openai')
+const gemini = require('@google/genai')
+const { GoogleGenAI, Type } = gemini
 
 // >= 4 copies of this file are run at once
 
-let modelGen = 'llama-3.3-70b-versatile'
-let timeoutGen = 0
-let clientGen = new OpenAI({ baseURL: 'https://api.groq.com/openai/v1', apiKey: process.env.groq_key })
+const modelGen = 'gemini-2.5-flash-lite'
+const timeoutGen = 5_000
+const clientGen = new GoogleGenAI({ apiKey: process.env.gemini_key })
 
-const modelGuide = 'gpt-4o'
+const modelGuide = 'gemini-2.5-flash-lite'
 const timeoutGuide = 7_000
-const clientGuide = new OpenAI({ apiKey: process.env.openai_key })
+const clientGuide = new GoogleGenAI({ apiKey: process.env.gemini_key })
 
 const modelRank = 'gemini-2.0-flash-lite'
-const timeoutRank = 3_000
-const clientRank = new OpenAI({ baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/', apiKey: process.env.gemini_key })
-
-if (process.env.openai_as_groq == 'true') {
-  modelGen = 'gpt-4o-mini'
-  timeoutGen = 0
-  clientGen = new OpenAI({ apiKey: process.env.openai_key })
-}
+const timeoutRank = 5_000
+const clientRank = new GoogleGenAI({ apiKey: process.env.gemini_key })
 
 const txtMsg = (text) => {
-  return { type: 'text', text }
+  return { text }
 }
 
 const imgMsg = (data) => {
-  return { type: 'image_url', image_url: { url: data, detail: 'low' } }
+  return { inlineData: { mimeType: 'image/jpeg', data }}
 }
 
 const noop = () => {}
 
-// avoid super delay
-const retryOnTimeout = (fn, timeout) => {
+// avoid super delay and avoid model overloaded
+const retryCommon = (fn, timeout) => {
   let timer = null
   const work = new Promise((res, rej) => {
-    fn().then(res).catch(rej)
-    timeout > 0 && (timer = setTimeout(() => fn().then(res).catch(rej), timeout))
+    const onError = (err) => {
+      if (!err.message.includes('503')) { return rej(err) }
+      setTimeout(() => fn().then(res).catch(rej), 150)
+    }
+    fn().then(res).catch(onError)
+    timeout > 0 && (timer = setTimeout(() => fn().then(res).catch(onError), timeout))
   })
   work.catch(noop).finally(() => clearTimeout(timer))
   return work
@@ -55,16 +55,17 @@ function onError(err) {
 }
 
 function systemGen() {
-  return `You layout text for SVG business cards. Only include text which is requested. Do not add colors.`
+  return `You do text-only SVG business cards. Only include text which is requested. Do not add colors. Do large text.`
 }
 
-function promptGen(types, values) {
+function promptGen(values, align) {
+  const dimens = wide ? `width="350" and height="200"` : `width="200" and height="350" (tall)`
+  const fonts = values.length >= 2 ? `Use "font1" and "font2"` : `Use font-family="font1"`
+  const center = align === 'center' || values.length <= 1
+  const alignn = center ? `Center align` : `Left align`
   values = values.join(`\n`)
-  const dimens = wide ? `a width of 350 pixels and a height of 200 pixels` : `a width of 200 pixels and a height of 350 pixels (tall)`
-  const fonts = types.length >= 2 ? `You must use font-family = "font1" and font-family = "font2"` : `You must use font-family = "font1"`
-  const text = !front ? 'good size text' : 'text'
   const prompt =  `
-Create a SVG image with ${dimens}. ${fonts}. The SVG should represent a business card with no background and black text. Do not use the style tag. Do not add a border. The image should display ${text} as follows:\n\n${values}`
+Create an SVG with ${dimens}. The SVG is a business card with black text and no bg. ${fonts}. Do not add a border. Do not use the SVG style tag. ${alignn} this text:\n${values}`
   return prompt.trim()
 }
 
@@ -72,6 +73,7 @@ function parseSvg(text) {
   text = text.replaceAll(`\\n`, '')
   const idx1 = text.indexOf('<svg')
   const idx2 = text.indexOf('</svg>')
+  if (idx1 < 0 || idx2 < 0) { return null }
   text = text.substring(idx1, idx2 + 6)
   if (text.includes('&amp;')) { return text }
   return text.replaceAll('&', '&amp;')
@@ -133,25 +135,26 @@ async function saveImage(id, svg) {
       ctx.roundRect(centerX, centerY, w, h, 6)
       ctx.stroke()
       ctx.drawImage(image, centerX, centerY, w, h)
-      let output = `assets/genai/${id}.jpg`
-      output = fs.createWriteStream(output)
+      const out = `assets/genai/${id}.jpg`
+      const output = fs.createWriteStream(out)
       const stream = canvas.createJPEGStream()
-      const data = canvas.toDataURL('image/jpeg')
-      output.on('finish', () => res(data))
+      output.on('finish', () => {
+        const img = fs.readFileSync(out, { encoding: 'base64' })
+        res(img)
+      })
       stream.pipe(output)
+    }).catch((err) => {
+      console.error(id, svg, err)
+      rej(err)
     })
   })
 }
 
 async function readImage(id) {
   const input = `assets/genai/${id}.jpg`
-  const canvas = createCanvas(512, 512)
-  const ctx = canvas.getContext('2d')
   return new Promise((res, rej) => {
-    loadImage(input).then((image) => {
-      ctx.drawImage(image, 0, 0, 512, 512)
-      res(canvas.toDataURL('image/jpeg'))
-    })
+    const img = fs.readFileSync(input, { encoding: 'base64' })
+    res(img)
   })
 }
 
@@ -214,33 +217,29 @@ async function cvImage(id) {
 }
 
 // things start to get complicated
-const idx = [0, 1, 2, 3, 4]
+const steps = 4
+const idx = new Array(steps).fill(0).map((i, idx) => idx)
 const pairs = combinations(idx).filter((arr) => arr.length === 2)
 const ids = []
 const done = new Set()
 const scores = {}
 
-const tools = [{
-  type: 'function',
-  'function': {
-    name: 'record_best_image',
-    description: 'Record which image is best',
-    parameters: {
-      type: 'object',
-      properties: {
-        image_1_critique: { type: 'string' },
-        image_2_critique: { type: 'string' },
-        best: {
-          type: 'string',
-          enum: ['image_1', 'image_2'],
-        },
-      },
-      required: ['image_1_critique', 'image_2_critique', 'best'],
-      additionalProperties: false,
+const rankImageFn = {
+  name: 'record_best_image',
+  description: 'Record best image',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      image_1_thoughts: { type: Type.STRING },
+      image_2_thoughts: { type: Type.STRING },
+      best: {
+        type: Type.STRING,
+        enum: ['image_1', 'image_2'],
+      }
     },
-    strict: true,
+    required: ['image_1_thoughts', 'image_2_thoughts', 'best']
   }
-}]
+}
 
 // collect token counts
 const usage = {
@@ -249,7 +248,7 @@ const usage = {
   rank: { in: 0, out: 0, ms: 0, count: 0 },
 }
 
-// eventually rank all against all
+// rank all against all
 async function rank(id) {
   ids.push(id)
   if (ids.length <= 1) { return }
@@ -276,30 +275,28 @@ async function rank(id) {
       const reads = pair.map((idx) => ids[idx]).map(readImage)
       return Promise.all(reads).then((imgs) => {
         const begin = Date.now()
-        const messages = [
-          { role: 'system', content: 'You are a designer with an eye for detail' },
-          { role: 'user', content: [imgMsg(imgs[0]), imgMsg(imgs[1]), txtMsg('Which image has the best text layout?')] },
-        ]
-        const fn = () => clientRank.chat.completions.create({
-          messages, model: modelRank, temperature: 1,
-          tools, max_completion_tokens: 128,
-          tool_choice: { type: 'function', 'function': { name: 'record_best_image' }},
-        })
-        const ok = (reply) => {
+        const tools = [{ functionDeclarations: [rankImageFn] }]
+        const systemInstruction = 'You are a designer'
+        const thinkingConfig = { thinkingBudget: 0 }
+        const toolConfig = { functionCallingConfig: { mode: 'ANY' }}
+        const config = { temperature: 1.1, maxOutputTokens: 128, thinkingConfig, systemInstruction, toolConfig, tools }
+        const parts = [imgMsg(imgs[0]), imgMsg(imgs[1]), txtMsg('Which image is most harmonious?')]
+        const fn = () => clientRank.models.generateContent({ model: modelRank, config, contents: parts })
+        const ok = (result) => {
           usage.rank.count++
-          usage.rank.in += reply.usage.prompt_tokens
-          usage.rank.out += reply.usage.completion_tokens
+          usage.rank.in += result.usageMetadata.promptTokenCount
+          usage.rank.out += result.usageMetadata.candidatesTokenCount
           usage.rank.ms += Date.now() - begin
           try {
-            reply = reply.choices[0].message.tool_calls[0]
-            reply = JSON.parse(reply.function.arguments)
+            result = result.functionCalls[0]
+            result = result.args
           } catch (err) {
             return null
           }
           pair = pair.map((idx) => ids[idx])
-          return reply.best === 'image_1' ? pair[0] : pair[1]
+          return result.best === 'image_1' ? pair[0] : pair[1]
         }
-        return retryOnTimeout(fn, timeoutRank).then(ok)
+        return retryCommon(fn, timeoutRank).then(ok)
       })
     })
   })
@@ -323,63 +320,77 @@ async function rank(id) {
 }
 
 // ask modelGuide what to tell modelGen
-async function guidance(types, values, svg, img) {
-  const andCenter = center ? `font-style, text-anchor and coordinates` : `font-style and coordinates`
-  const system = `You improve text organization, alignment, and style. All must be neatly within the red border. Black and white text only. Dont suggest to resize the border. Dont suggest adding logos.`
-  const prompt = `Write one sentance for each line of text with suggestions on how to update the SVG attributes and coordinates. May use font-size, font-weight, ${andCenter}.`
-  const prev = promptGen(types, values)
-  const messages = [
-    { role: 'user', content: prev },
-    { role: 'assistant', content: `The SVG:\n\n${svg}` },
-    { role: 'system', content: system },
-    { role: 'user', content: [txtMsg(prompt), imgMsg(img)] },
-  ]
+async function guidance(values, svg, img) {
+  const system = `You improve SVG business card text layout and text style. All must be neatly within the red border. Do not suggest resize the border. Do not suggest add logo.`
+  const history = []
+  let prev = promptGen(values, align)
+  history.push({ role: 'user', parts: [txtMsg(prev)] })
+  prev = `The SVG:\n${svg}`
+  history.push({ role: 'model', parts: [txtMsg(prev)] })
+
+  const systemInstruction = system
+  const thinkingConfig = { thinkingBudget: 0 }
+  const config = { temperature: 1.1, maxOutputTokens: 512, thinkingConfig, systemInstruction }
+  const chat = clientGuide.chats.create({ model: modelGuide, history, config })
+
+  const andMore = center ? `font-style, text-anchor and coordinates` : `font-style and coordinates`
+  const prompt = `Write at most one sentance for each line of the SVG with suggestions on how to make the SVG better. Must suggest at least one change. May use font-size, font-weight, ${andMore}.`
+
+  const parts = []
+  parts.push(imgMsg(img))
+  parts.push(txtMsg(prev))
+  parts.push(txtMsg(prompt))
+
   const begin = Date.now()
-  const fn = () => clientGuide.chat.completions.create({
-    messages, model: modelGuide, temperature: 1,
-    max_completion_tokens: 512,
-  })
-  const ok = (reply) => {
+  const fn = () => chat.sendMessage({ message: parts })
+  const ok = (result) => {
     usage.guide.count++
-    usage.guide.in += reply.usage.prompt_tokens
-    usage.guide.out += reply.usage.completion_tokens
+    usage.guide.in += result.usageMetadata.promptTokenCount
+    usage.guide.out += result.usageMetadata.candidatesTokenCount
     usage.guide.ms += Date.now() - begin
-    return reply.choices[0].message.content.replaceAll(/\sred/gi, '')
+    return result.text.replaceAll(/\sred/gi, '')
   }
-  return retryOnTimeout(fn, timeoutGuide).then(ok)
+  return retryCommon(fn, timeoutGuide).then(ok)
 }
 
 async function step(history, id) {
   const begin = Date.now()
-  const fn = () => clientGen.chat.completions.create({
-    messages: history, model: modelGen, temperature: 1.2,
-    max_completion_tokens: 900,
-  })
-  let result = await retryOnTimeout(fn, timeoutGen)
+  history = [...history]
+  let next = history.pop()
+  const systemInstruction = systemGen()
+  const thinkingConfig = { thinkingBudget: 0 }
+  const config = { temperature: 1, maxOutputTokens: 900, thinkingConfig, systemInstruction }
+  const chat = clientGen.chats.create({ model: modelGen, history, config })
+  const fn = () => chat.sendMessage({ message: next.parts })
+
+  let result = await retryCommon(fn, timeoutGen)
   usage.gen.count++
-  usage.gen.in += result.usage.prompt_tokens
-  usage.gen.out += result.usage.completion_tokens
+  usage.gen.in += result.usageMetadata.promptTokenCount
+  usage.gen.out += result.usageMetadata.candidatesTokenCount
   usage.gen.ms += Date.now() - begin
-  result = result.choices[0].message
-  result = { role: 'assistant', content: result.content }
-  history.push(result)
-  return saveImage(id, parseSvg(result.content))
+
+  result = result.text
+  const svg = parseSvg(result)
+  if (!svg) {
+    const opts = { showHidden: false, depth: null, colors: true }
+    console.error(123, util.inspect(history, opts))
+    console.error(456, util.inspect(next, opts))
+    console.error(789, util.inspect(result, opts))
+    return null
+  }
+
+  const img = await saveImage(id, svg)
+  return [svg, img]
 }
 
 const ranks = []
 
 // for dev
 function end() {
-  usage.gen.in = Math.round(usage.gen.in / usage.gen.count)
-  usage.gen.out = Math.round(usage.gen.out / usage.gen.count)
   usage.gen.ms = Math.round(usage.gen.ms / usage.gen.count)
   console.error('gen ==', usage.gen.count, usage.gen.ms, usage.gen.in, usage.gen.out)
-  usage.guide.in = Math.round(usage.guide.in / usage.guide.count)
-  usage.guide.out = Math.round(usage.guide.out / usage.guide.count)
   usage.guide.ms = Math.round(usage.guide.ms / usage.guide.count)
   console.error('guide ==', usage.guide.count, usage.guide.ms, usage.guide.in, usage.guide.out)
-  usage.rank.in = Math.round(usage.rank.in / usage.rank.count)
-  usage.rank.out = Math.round(usage.rank.out / usage.rank.count)
   usage.rank.ms = Math.round(usage.rank.ms / usage.rank.count)
   console.error('rank ==', usage.rank.count, usage.rank.ms, usage.rank.in, usage.rank.out)
   console.log('end')
@@ -387,24 +398,23 @@ function end() {
 }
 
 // the big loop
-async function generate(texts, steps) {
-  const [types, values] = [Object.keys(texts), Object.values(texts)]
-  const prompt = promptGen(types, values)
-  const previous = [
-    { role: 'user', content: systemGen() }, // groq llama compat
-    { role: 'assistant', content: 'OK I understand.' },
-    { role: 'user', content: prompt },
-  ]
+async function generate(texts) {
+  const values = Object.values(texts)
+  const prompt = promptGen(values, align)
+  const previous = [{ role: 'user', parts: [txtMsg(prompt)] }]
 
   let next = []
   let count = 0
   while (count < steps) {
     const id = uuidv7()
     const history = [...previous, ...next]
-    const img = await step(history, id)
+    const ok = await step(history, id)
+    if (!ok) {
+      Promise.all(ranks).then(end)
+      break
+    }
 
-    const reply = history[history.length-1]
-    const svg = parseSvg(reply.content)
+    const [svg, img] = ok
     const out = Buffer.from(svg).toString('base64')
     console.log(`svg,${id},${out}`)
 
@@ -414,12 +424,10 @@ async function generate(texts, steps) {
       break
     }
 
-    next = []
-    reply.content = `The SVG:\n\n${svg}`
-    next.push(reply)
-    begin = Date.now()
-    const guide = await guidance(types, values, svg, img)
-    next.push({ role: 'user', content: guide })
+    let guide = await guidance(values, svg, img)
+    next = [{ role: 'model', parts: [txtMsg(`The SVG:\n${svg}`)] }]
+    guide = `Use this guidance to return the improved SVG:\n${guide}`
+    next.push({ role: 'user', parts: [txtMsg(guide)] })
     count++
   }
 }
@@ -465,7 +473,7 @@ async function initFont(name, key) {
   })
 }
 
-async function main(texts, steps, fonts) {
+async function main(texts, fonts) {
   const dir = `/tmp/${thread}`
   try {
 
@@ -476,11 +484,11 @@ async function main(texts, steps, fonts) {
     font1 = fonts[0].name
     font2 = fonts[1].name
     scaleFonts()
-    // tall && back = wide
+    // back && tall = wide
     const compat = !front && tall
     compat && (wide = true)
     compat && (tall = false)
-    await generate(texts, steps)
+    await generate(texts)
 
   } finally {
     await fsp.rm(dir, { recursive: true, force: true })
@@ -493,14 +501,16 @@ args = Buffer.from(args, 'base64').toString('utf8')
 args = JSON.parse(args)
 
 const thread = args.thread
+const front = args.front
+
+const align = args.align
+const center = align === 'center'
+
 let tall = args.dimens === 'tall'
 let wide = !tall
-const center = args.center ?? false
-const front = args.front
 
 const texts = args.texts
 const fonts = args.fonts
-const steps = 5
 
-main(texts, steps, fonts).catch(onError)
+main(texts, fonts).catch(onError)
 setTimeout(() => onError(new Error('60s timeout')), 60_000)

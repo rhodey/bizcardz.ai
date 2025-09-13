@@ -27,17 +27,6 @@ const srcEmpty = {
   },
 }
 
-const srcLoading = {
-  wide: {
-    b: '/assets/img/loading-wide-b.png',
-    w: '/assets/img/loading-wide-w.png',
-  },
-  tall: {
-    b: '/assets/img/loading-tall-b.png',
-    w: '/assets/img/loading-tall-w.png',
-  },
-}
-
 module.exports = class TwoCard extends Component {
   constructor(id, state, emit) {
     super(id)
@@ -48,7 +37,7 @@ module.exports = class TwoCard extends Component {
     state.cards = state.cards ?? { cache: {} }
     this.cache = state.cards.cache
     this.compatt = null
-    this.empty = id.includes('card24') ? srcEmpty : srcLoading
+    this.empty = srcEmpty
   }
 
   compat(id) {

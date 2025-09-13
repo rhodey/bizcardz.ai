@@ -261,7 +261,7 @@ async function getTextBatch(request, response) {
   // tell user their place in line if delayed
   const active = batch.images.length > 0 || q1.rows[0].worker
   const waitedABit = (q1.rows[0].created.getTime() + 3_000) < Date.now()
-  !active && waitedABit && (batch.queue = 1 + parseInt(q3.rows[0].c))
+  !active && waitedABit && (batch.queue = parseInt(q3.rows[0].c))
 
   writeHead(response, 200)
   response.end(JSON.stringify(batch))
@@ -305,7 +305,7 @@ async function getTextBatchPrev(request, response) {
   // tell user their place in line if delayed
   const active = batch.images.length > 0 || q1.rows[0].worker
   const waitedABit = (q1.rows[0].created.getTime() + 3_000) < Date.now()
-  !active && waitedABit && (batch.queue = 1 + parseInt(q3.rows[0].c))
+  !active && waitedABit && (batch.queue = parseInt(q3.rows[0].c))
 
   writeHead(response, 200)
   response.end(JSON.stringify(batch))

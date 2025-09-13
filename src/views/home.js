@@ -20,7 +20,7 @@ module.exports = function homeView(state, emit) {
   const cache = state.cache
   state = state.home
 
-  const overCapacity = () => state.waiting >= 36
+  const overCapacity = () => state.waiting >= 32
 
   const item = gallery[state.count % gallery.length]
   const [colors, front, back] = item
